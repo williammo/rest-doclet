@@ -15,33 +15,48 @@
  *******************************************************************************/
 package org.calrissian.restdoclet.collector;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 
 import com.sun.javadoc.ClassDoc;
 import com.sun.javadoc.MethodDoc;
 import com.sun.javadoc.ProgramElementDoc;
 import com.sun.javadoc.RootDoc;
-import org.calrissian.restdoclet.model.*;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.LinkedHashSet;
+import org.calrissian.restdoclet.model.ClassDescriptor;
+import org.calrissian.restdoclet.model.Endpoint;
+import org.calrissian.restdoclet.model.PathVar;
+import org.calrissian.restdoclet.model.QueryParam;
+import org.calrissian.restdoclet.model.RequestBody;
 
 import static java.util.Collections.emptyList;
-import static org.calrissian.restdoclet.util.CommonUtils.*;
-import static org.calrissian.restdoclet.util.TagUtils.*;
+import static org.calrissian.restdoclet.util.CommonUtils.firstNonEmpty;
+import static org.calrissian.restdoclet.util.CommonUtils.fixPath;
+import static org.calrissian.restdoclet.util.CommonUtils.isEmpty;
+import static org.calrissian.restdoclet.util.TagUtils.CONTEXT_TAG;
+import static org.calrissian.restdoclet.util.TagUtils.IGNORE_TAG;
+import static org.calrissian.restdoclet.util.TagUtils.NAME_TAG;
+import static org.calrissian.restdoclet.util.TagUtils.firstSentence;
 
 public abstract class AbstractCollector implements Collector {
 
     protected abstract boolean shouldIgnoreClass(ClassDoc classDoc);
+
     protected abstract boolean shouldIgnoreMethod(MethodDoc methodDoc);
+
     protected abstract EndpointMapping getEndpointMapping(ProgramElementDoc doc);
+
     protected abstract Collection<PathVar> generatePathVars(MethodDoc methodDoc);
+
     protected abstract Collection<QueryParam> generateQueryParams(MethodDoc methodDoc);
+
     protected abstract RequestBody generateRequestBody(MethodDoc methodDoc);
 
     /**
      * Will generate and aggregate all the rest endpoint class descriptors.
+     *
      * @param rootDoc
+     *
      * @return
      */
     @Override
@@ -51,8 +66,7 @@ public abstract class AbstractCollector implements Collector {
         //Loop through all of the classes and if it contains endpoints then add it to the set of descriptors.
         for (ClassDoc classDoc : rootDoc.classes()) {
             ClassDescriptor descriptor = getClassDescriptor(classDoc);
-            if (descriptor != null && !isEmpty(descriptor.getEndpoints()))
-                classDescriptors.add(descriptor);
+            if (descriptor != null && !isEmpty(descriptor.getEndpoints())) { classDescriptors.add(descriptor); }
         }
 
         return classDescriptors;
@@ -61,49 +75,55 @@ public abstract class AbstractCollector implements Collector {
     /**
      * Will generate a single class descriptor and all the endpoints for that class.
      *
-     * If any class contains the special javadoc tag {@link org.calrissian.restdoclet.util.TagUtils.IGNORE_TAG} it will be excluded.
+     * If any class contains the special javadoc tag {@link org.calrissian.restdoclet.util.TagUtils#IGNORE_TAG} it will
+     * be excluded.
+     *
      * @param classDoc
+     *
      * @return
      */
     protected ClassDescriptor getClassDescriptor(ClassDoc classDoc) {
 
         //If the ignore tag is present or this type of class should be ignored then simply ignore this class
-        if (!isEmpty(classDoc.tags(IGNORE_TAG)) || shouldIgnoreClass(classDoc))
-            return null;
+        if (!isEmpty(classDoc.tags(IGNORE_TAG)) || shouldIgnoreClass(classDoc)) { return null; }
         String contextPath = getContextPath(classDoc);
         Collection<Endpoint> endpoints = getAllEndpoints(contextPath, classDoc, getEndpointMapping(classDoc));
 
         //If there are no endpoints then no use in providing documentation.
-        if (isEmpty(endpoints))
-            return null;
+        if (isEmpty(endpoints)) { return null; }
 
         String name = getClassName(classDoc);
         String description = getClassDescription(classDoc);
 
         return new ClassDescriptor(
-                (name == null ? "" : name),
-                (contextPath == null ? "" : contextPath),
-                endpoints,
-                (description == null ? "" : description)
+            (name == null ? "" : name),
+            (contextPath == null ? "" : contextPath),
+            endpoints,
+            (description == null ? "" : description)
         );
     }
 
     /**
      * Retrieves all the end point provided in the specified class doc.
+     *
      * @param contextPath
      * @param classDoc
      * @param classMapping
+     *
      * @return
      */
-    protected Collection<Endpoint> getAllEndpoints(String contextPath, ClassDoc classDoc, EndpointMapping classMapping) {
+    protected Collection<Endpoint> getAllEndpoints(String contextPath, ClassDoc classDoc,
+                                                   EndpointMapping classMapping) {
         Collection<Endpoint> endpoints = new ArrayList<Endpoint>();
 
-        for (MethodDoc method : classDoc.methods(true))
+        for (MethodDoc method : classDoc.methods(false)) {
             endpoints.addAll(getEndpoint(contextPath, classMapping, method));
+        }
 
         //Check super classes for inherited methods
-        if (classDoc.superclass() != null)
+        if (classDoc.superclass() != null) {
             endpoints.addAll(getAllEndpoints(contextPath, classDoc.superclass(), classMapping));
+        }
 
         return endpoints;
     }
@@ -111,17 +131,19 @@ public abstract class AbstractCollector implements Collector {
     /**
      * Retrieves the endpoint for a single method.
      *
-     * If any method contains the special javadoc tag {@link org.calrissian.restdoclet.util.TagUtils.IGNORE_TAG} it will be excluded.
+     * If any method contains the special javadoc tag {@link org.calrissian.restdoclet.util.TagUtils#IGNORE_TAG} it will
+     * be excluded.
+     *
      * @param contextPath
      * @param classMapping
      * @param method
+     *
      * @return
      */
     protected Collection<Endpoint> getEndpoint(String contextPath, EndpointMapping classMapping, MethodDoc method) {
 
         //If the ignore tag is present then simply return nothing for this endpoint.
-        if (!isEmpty(method.tags(IGNORE_TAG)) || shouldIgnoreMethod(method))
-            return emptyList();
+        if (!isEmpty(method.tags(IGNORE_TAG)) || shouldIgnoreMethod(method)) { return emptyList(); }
 
         Collection<Endpoint> endpoints = new ArrayList<Endpoint>();
         EndpointMapping methodMapping = getEndpointMapping(method);
@@ -134,22 +156,24 @@ public abstract class AbstractCollector implements Collector {
         Collection<QueryParam> queryParams = generateQueryParams(method);
         RequestBody requestBody = generateRequestBody(method);
 
-        for (String httpMethod : httpMethods)
-            for (String path : paths)
+        for (String httpMethod : httpMethods) {
+            for (String path : paths) {
                 endpoints.add(
-                        new Endpoint(
-                                path,
-                                httpMethod,
-                                queryParams,
-                                pathVars,
-                                requestBody,
-                                consumes,
-                                produces,
-                                method.commentText(),
-                                firstSentence(method),
-                                method.returnType()
-                        )
+                    new Endpoint(
+                        path,
+                        httpMethod,
+                        queryParams,
+                        pathVars,
+                        requestBody,
+                        consumes,
+                        produces,
+                        method.commentText(),
+                        firstSentence(method),
+                        method.returnType()
+                    )
                 );
+            }
+        }
 
         return endpoints;
     }
@@ -157,14 +181,14 @@ public abstract class AbstractCollector implements Collector {
     /**
      * Will get the initial context path to use for all rest endpoint.
      *
-     * This looks for the value in a special javadoc tag {@link org.calrissian.restdoclet.util.TagUtils.CONTEXT_TAG}
+     * This looks for the value in a special javadoc tag {@link org.calrissian.restdoclet.util.TagUtils#CONTEXT_TAG}
      *
      * @param classDoc
+     *
      * @return
      */
     protected String getContextPath(ClassDoc classDoc) {
-        if(!isEmpty(classDoc.tags(CONTEXT_TAG)))
-            return classDoc.tags(CONTEXT_TAG)[0].text();
+        if (!isEmpty(classDoc.tags(CONTEXT_TAG))) { return classDoc.tags(CONTEXT_TAG)[0].text(); }
 
         return "";
     }
@@ -172,21 +196,23 @@ public abstract class AbstractCollector implements Collector {
     /**
      * Will get the display name for the class.
      *
-     * This looks for the value in a special javadoc tag {@link org.calrissian.restdoclet.util.TagUtils.NAME_TAG}
+     * This looks for the value in a special javadoc tag {@link org.calrissian.restdoclet.util.TagUtils#NAME_TAG}
      *
      * @param classDoc
+     *
      * @return
      */
     protected String getClassName(ClassDoc classDoc) {
-        if (!isEmpty(classDoc.tags(NAME_TAG)))
-            return classDoc.tags(NAME_TAG)[0].text();
+        if (!isEmpty(classDoc.tags(NAME_TAG))) { return classDoc.tags(NAME_TAG)[0].text(); }
 
         return classDoc.typeName();
     }
 
     /**
      * Will get the description for the class.
+     *
      * @param classDoc
+     *
      * @return
      */
     protected String getClassDescription(ClassDoc classDoc) {
@@ -201,9 +227,11 @@ public abstract class AbstractCollector implements Collector {
      * @param contextPath
      * @param classMapping
      * @param methodMapping
+     *
      * @return
      */
-    protected Collection<String> resolvePaths(String contextPath, EndpointMapping classMapping, EndpointMapping methodMapping) {
+    protected Collection<String> resolvePaths(String contextPath, EndpointMapping classMapping,
+                                              EndpointMapping methodMapping) {
 
         contextPath = (contextPath == null ? "" : contextPath);
 
@@ -212,19 +240,19 @@ public abstract class AbstractCollector implements Collector {
 
         if (isEmpty(classMapping.getPaths())) {
 
-            for (String path : methodMapping.getPaths())
-                paths.add(fixPath(contextPath + path));
+            for (String path : methodMapping.getPaths()) { paths.add(fixPath(fixPath(contextPath) + fixPath(path))); }
 
         } else if (isEmpty(methodMapping.getPaths())) {
 
-            for (String path : classMapping.getPaths())
-                paths.add(fixPath(contextPath + path));
+            for (String path : classMapping.getPaths()) { paths.add(fixPath(fixPath(contextPath) + fixPath(path))); }
 
         } else {
 
-            for (String defaultPath : classMapping.getPaths())
-                for (String path : methodMapping.getPaths())
-                    paths.add(fixPath(contextPath + defaultPath + path));
+            for (String defaultPath : classMapping.getPaths()) {
+                for (String path : methodMapping.getPaths()) {
+                    paths.add(fixPath(fixPath(contextPath) + fixPath(defaultPath) + fixPath(path)));
+                }
+            }
 
         }
 
@@ -234,42 +262,48 @@ public abstract class AbstractCollector implements Collector {
     /**
      * Will use the method's mapped information if it is not empty, otherwise it will use the class mapping information
      * to retrieve all the https methods.
+     *
      * @param classMapping
      * @param methodMapping
+     *
      * @return
      */
     protected Collection<String> resolveHttpMethods(EndpointMapping classMapping, EndpointMapping methodMapping) {
         return firstNonEmpty(
-                methodMapping.getHttpMethods(),
-                classMapping.getHttpMethods()
+            methodMapping.getHttpMethods(),
+            classMapping.getHttpMethods()
         );
     }
 
     /**
      * Will use the method's mapped information if it is not empty, otherwise it will use the class mapping information
      * to retrieve all the consumeable information.
+     *
      * @param classMapping
      * @param methodMapping
+     *
      * @return
      */
     protected Collection<String> resolveConsumesInfo(EndpointMapping classMapping, EndpointMapping methodMapping) {
         return firstNonEmpty(
-                methodMapping.getConsumes(),
-                classMapping.getConsumes()
+            methodMapping.getConsumes(),
+            classMapping.getConsumes()
         );
     }
 
     /**
      * Will use the method's mapped information if it is not empty, otherwise it will use the class mapping information
      * to retrieve all the produceable information.
+     *
      * @param classMapping
      * @param methodMapping
+     *
      * @return
      */
     protected Collection<String> resolvesProducesInfo(EndpointMapping classMapping, EndpointMapping methodMapping) {
         return firstNonEmpty(
-                methodMapping.getProduces(),
-                classMapping.getProduces()
+            methodMapping.getProduces(),
+            classMapping.getProduces()
         );
     }
 }

@@ -15,11 +15,13 @@
  *******************************************************************************/
 package org.calrissian.restdoclet.util;
 
+import java.util.Objects;
+
 import com.sun.javadoc.Doc;
+import com.sun.javadoc.ParamTag;
 import com.sun.javadoc.Tag;
 
 import static org.calrissian.restdoclet.util.CommonUtils.isEmpty;
-
 
 public class TagUtils {
 
@@ -31,19 +33,28 @@ public class TagUtils {
     public static final String REQUESTBODY_TAG = "requestBody";
 
     public static String findParamText(Tag[] tags, String name) {
-        for (Tag tag : tags)
-            if (tag.text().trim().equals(name) || tag.text().trim().startsWith(name + " "))
+        for (Tag tag : tags) {
+            if (tag.text().trim().equals(name) || tag.text().trim().startsWith(name + " ")) {
                 return tag.text().trim().substring(name.length()).trim();
+            }
+        }
 
         return null;
+    }
+
+    public static String findParamComment(ParamTag[] tags, String name) {
+        for (ParamTag tag : tags) {
+            if (Objects.equals(name, tag.parameterName())) { return tag.parameterComment(); }
+        }
+
+        return "";
     }
 
     public static String firstSentence(Doc doc) {
         Tag[] tags = doc.firstSentenceTags();
         StringBuilder sb = new StringBuilder();
         if (!isEmpty(tags)) {
-            for (Tag tag : tags)
-                sb.append(tag.text());
+            for (Tag tag : tags) { sb.append(tag.text()); }
         }
 
         return sb.toString();

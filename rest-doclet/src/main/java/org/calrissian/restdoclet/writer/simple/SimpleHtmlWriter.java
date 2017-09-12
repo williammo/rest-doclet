@@ -15,16 +15,32 @@
  *******************************************************************************/
 package org.calrissian.restdoclet.writer.simple;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.io.Writer;
+import java.util.Arrays;
+import java.util.Collection;
+
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.javadoc.ClassDoc;
+import com.sun.javadoc.FieldDoc;
+import com.sun.javadoc.Type;
+import org.apache.commons.lang3.StringUtils;
 import org.calrissian.restdoclet.Configuration;
 import org.calrissian.restdoclet.model.ClassDescriptor;
 import org.calrissian.restdoclet.model.Endpoint;
 import org.calrissian.restdoclet.model.PathVar;
 import org.calrissian.restdoclet.model.QueryParam;
 
-import java.io.*;
-import java.util.Collection;
-
-import static org.calrissian.restdoclet.util.CommonUtils.*;
+import static org.calrissian.restdoclet.util.CommonUtils.close;
+import static org.calrissian.restdoclet.util.CommonUtils.copy;
+import static org.calrissian.restdoclet.util.CommonUtils.isEmpty;
 
 public class SimpleHtmlWriter implements org.calrissian.restdoclet.writer.Writer {
     public static final String OUTPUT_OPTION_NAME = "legacy";
@@ -33,8 +49,7 @@ public class SimpleHtmlWriter implements org.calrissian.restdoclet.writer.Writer
     @Override
     public void write(Collection<ClassDescriptor> classDescriptors, Configuration config) throws IOException {
 
-        if (config.isdefaultStyleSheet())
-            generateStyleSheet(config);
+        if (config.isdefaultStyleSheet()) { generateStyleSheet(config); }
 
         writeHtml(classDescriptors, config);
     }
@@ -54,22 +69,23 @@ public class SimpleHtmlWriter implements org.calrissian.restdoclet.writer.Writer
         }
     }
 
-    private static void writeHtml(Collection<ClassDescriptor> classDescriptors, Configuration config) throws IOException {
+    private static void writeHtml(Collection<ClassDescriptor> classDescriptors, Configuration config)
+        throws IOException {
 
         PrintWriter out = null;
 
         try {
-            out = new PrintWriter(new File(".", "index.html"));
+            out = new PrintWriter(new File(".", "index.html"), java.nio.charset.StandardCharsets.UTF_8.displayName());
 
-            out.println("<?xml version=\"1.0\" encoding=\"ISO-8859-1\" standalone=\"no\" ?>");
+            out.println("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"no\" ?>");
             out.println("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\"");
             out.println("    \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">");
 
             out.println("<html xmlns=\"http://www.w3.org/1999/xhtml\">");
 
             out.println("<head>");
-            out.println("<meta http-equiv=\"Content-Type\" content=\"text/html; charset=ISO-8859-1\" />");
-            out.println("<title>"+ config.getDocumentTitle() +"</title>");
+            out.println("<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />");
+            out.println("<title>" + config.getDocumentTitle() + "</title>");
             out.println("<link rel='stylesheet' type='text/css' href=' " + config.getStyleSheet() + "'/>");
             out.println("</head>");
 
@@ -78,15 +94,15 @@ public class SimpleHtmlWriter implements org.calrissian.restdoclet.writer.Writer
             out.println("<div id=\"wrapper\">");
             out.println("<div id=\"container\">");
 
-            out.println("<h1>"+ config.getDocumentTitle() +"</h1>");
+            out.println("<h1>" + config.getDocumentTitle() + "</h1>");
             out.println("<hr />");
 
             for (ClassDescriptor classDescriptor : classDescriptors) {
                 out.println("<div id='" + classDescriptor.getName().replace(" ", "_") + "'>");
-                out.println("<h3>" + classDescriptor.getName() + "</h3>" );
+                out.println("<h3>" + classDescriptor.getName() + "</h3>");
                 out.print("<div class=\"bean_description\">" + classDescriptor.getDescription() + "</div>");
 
-                for (Endpoint endpoint: classDescriptor.getEndpoints()) {
+                for (Endpoint endpoint : classDescriptor.getEndpoints()) {
                     out.println("<table class=\"endpoint\">");
                     out.println("<colgroup>");
                     out.println("<col style=\"width: 10%;\" />");
@@ -125,7 +141,22 @@ public class SimpleHtmlWriter implements org.calrissian.restdoclet.writer.Writer
                         out.println("<table width=\"100%\" class=\"list\">");
                         for (QueryParam queryParam : endpoint.getQueryParams()) {
                             out.println("<tr>");
-                            out.println("<td class=\"code_format\">" + queryParam.getName() + (queryParam.isRequired() ? " (required)" : "") + "</td>");
+                            out.println("<td class=\"code_format\">" + queryParam.getName() + (queryParam.isRequired()
+                                ? " (required)" : "") + "</td>");
+
+                            Type type = queryParam.getType();
+                            if (isPrimitiveLikeType(type)) {
+                                out.println("<td>" + queryParam.getType().simpleTypeName() + "</td>");
+                            } else {
+                                out.println("<td><pre>");
+
+                                StringWriter writer = new StringWriter();
+                                writePojoParam(writer, queryParam.getType().asClassDoc(), null);
+                                out.println(writer.toString());
+
+                                out.println("</pre></td>");
+                            }
+
                             out.println("<td class=\"descr_format\">" + queryParam.getDescription() + "</td>");
                             out.println("</tr>");
                         }
@@ -133,12 +164,13 @@ public class SimpleHtmlWriter implements org.calrissian.restdoclet.writer.Writer
                     }
 
                     if (endpoint.getRequestBody() != null &&
-                            !isEmpty(endpoint.getRequestBody().getDescription())) {
+                        !isEmpty(endpoint.getRequestBody().getDescription())) {
                         out.println("<div class=\"info_title\">Request Body</div>");
                         out.println("<table width=\"100%\" class=\"list\">");
                         out.println("<tr>");
                         out.println("<td class=\"code_format\">" + endpoint.getRequestBody().getName() + "</td>");
-                        out.println("<td class=\"descr_format\">" + endpoint.getRequestBody().getDescription() + "</td>");
+                        out.println(
+                            "<td class=\"descr_format\">" + endpoint.getRequestBody().getDescription() + "</td>");
                         out.println("</tr>");
                         out.println("</table>");
                     }
@@ -187,6 +219,77 @@ public class SimpleHtmlWriter implements org.calrissian.restdoclet.writer.Writer
         }
     }
 
+    /**
+     * Print pojo as json string format.
+     *
+     * @param writer
+     *     writer
+     * @param type
+     *     pojo type
+     * @param fieldName
+     *     field name
+     *
+     * @throws IOException
+     *     io exception
+     */
+    private static void writePojoParam(Writer writer, ClassDoc type, String fieldName) throws IOException {
+        ObjectMapper obj = new ObjectMapper();
+        JsonGenerator json = obj.getFactory().createGenerator(writer)
+            .useDefaultPrettyPrinter();
 
+        if (fieldName != null) {
+            json.writeFieldName(fieldName);
+        }
+
+        json.writeStartObject();
+        for (FieldDoc fieldDoc : type.fields(false)) {
+            // Only fields which has setter
+            if (Arrays.stream(type.methods()).anyMatch(
+                (m) -> StringUtils.equalsIgnoreCase(m.name(), "set" + fieldDoc.name()))) {
+                if (isPrimitiveLikeType(fieldDoc.type())) {
+                    json.writeStringField(fieldDoc.name(),
+                        "[" + fieldDoc.type().simpleTypeName() + "]" + fieldDoc.commentText());
+                } else {
+                    writePojoParam(writer, fieldDoc.type().asClassDoc(), fieldDoc.name());
+                }
+            }
+        }
+
+        // Has super class，then print fields of the super class.
+        if (type.superclass() != null) {
+
+            for (FieldDoc fieldDoc : type.superclass().fields(false)) {
+                // Only fields which has setter
+                if (Arrays.stream(type.superclass().methods()).anyMatch(
+                    (m) -> StringUtils.equalsIgnoreCase(m.name(), "set" + fieldDoc.name()))) {
+
+                    if (isPrimitiveLikeType(fieldDoc.type())) {
+                        json.writeStringField(fieldDoc.name(),
+                            "[" + fieldDoc.type().simpleTypeName() + "]" + fieldDoc.commentText());
+                    } else {
+                        writePojoParam(writer, fieldDoc.type().asClassDoc(), fieldDoc.name());
+                    }
+
+                }
+            }
+        }
+
+        json.writeEndObject();
+        json.close();
+    }
+
+    /**
+     * Is primitive like type? long, {@link Long}, {@link String} and so on.
+     *
+     * @param type
+     *     class type
+     *
+     * @return true if the type is primitive or sort of type.
+     */
+    private static boolean isPrimitiveLikeType(Type type) {
+        return type.isPrimitive() || StringUtils.startsWith(
+            type.qualifiedTypeName(), "java.lang.") || StringUtils.startsWith(
+            type.qualifiedTypeName(), "java.util.");
+    }
 
 }

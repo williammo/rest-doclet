@@ -40,14 +40,16 @@ public class CommonUtils {
         return value == null || value.isEmpty();
     }
 
-    public static void close(Closeable... closeables) throws IOException{
-        if (isEmpty(closeables))
+    public static void close(Closeable... closeables) throws IOException {
+        if (isEmpty(closeables)) {
             return;
+        }
 
         Exception first = null;
         for (Closeable closeable : closeables) {
-            if (closeable == null)
+            if (closeable == null) {
                 continue;
+            }
 
             try {
                 closeable.close();
@@ -56,15 +58,18 @@ public class CommonUtils {
             }
         }
 
-        if (first != null)
+        if (first != null) {
             throw (first instanceof IOException ? (IOException)first : new IOException(first));
+        }
 
     }
 
     public static <T> Collection<T> firstNonEmpty(Collection<T>... collections) {
-        for (Collection<T> collection : collections)
-            if (!isEmpty(collection))
+        for (Collection<T> collection : collections) {
+            if (!isEmpty(collection)) {
                 return collection;
+            }
+        }
 
         return emptySet();
     }
@@ -73,14 +78,15 @@ public class CommonUtils {
         byte[] buffer = new byte[1024 * 4];
         int len;
 
-        while ((len = input.read(buffer)) > 0 ) {
+        while ((len = input.read(buffer)) > 0) {
             output.write(buffer, 0, len);
         }
     }
 
     public static String fixPath(String path) {
-        if (isEmpty(path))
+        if (isEmpty(path)) {
             return "/";
+        }
 
         //remove duplicates path seperators
         int len = 0;
@@ -89,11 +95,13 @@ public class CommonUtils {
             path = path.replaceAll("//", "/");
         }
 
-        if (path.length() > 1 && path.endsWith("/"))
+        if (path.length() > 1 && path.endsWith("/")) {
             path = path.substring(0, path.length() - 2);
+        }
 
-        if (!path.startsWith("/"))
+        if (!path.startsWith("/")) {
             path = "/" + path;
+        }
 
         return path;
     }
